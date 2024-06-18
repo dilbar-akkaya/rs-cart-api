@@ -1,55 +1,107 @@
-import { Injectable } from '@nestjs/common';
-
-import { v4 } from 'uuid';
-
-import { Cart } from '../models';
+import { Injectable } from "@nestjs/common";
+import { v4 } from "uuid";
+import { Cart, Status } from "../models";
+import { createClient } from "src/db/client";
+import { addCartItemQuery, addCartQuery, cartProductsQuery, deleteCartByUserId, deleteCartItemQuery, userCartQuery } from "src/db/queries";
 
 @Injectable()
 export class CartService {
-  private userCarts: Record<string, Cart> = {};
+    async findByUserId(userId: string): Promise<Cart> {
+        const client = await createClient();
+        try {
+            const result = await client.query(userCartQuery, [userId]);
+            const cart = result.rows[0];
+            const itemsResult = await client.query(cartProductsQuery, [cart.id]);
+            cart.items = itemsResult.rows.map(row => ({
+                count: row.count,
+                product: {
+                    id: row.id,
+                    title: row.title,
+                    description: row.description,
+                    price: row.price
+                }
+            }));
 
-  findByUserId(userId: string): Cart {
-    return this.userCarts[ userId ];
-  }
-
-  createByUserId(userId: string) {
-    const id = v4(v4());
-    const userCart = {
-      id,
-      items: [],
+            return cart;
+        } catch (err) {
+            console.error("Error", err.message);
+            throw err;
+        } finally {
+            await client.end();
+        };
     };
 
-    this.userCarts[ userId ] = userCart;
+    async createByUserId(userId: string): Promise<Cart> {
+        const client = await createClient();
 
-    return userCart;
-  }
+        try {
+            const id = v4();
+            const createdAt = new Date();
+            const updatedAt = createdAt;
+            const status = Status.OPEN;
 
-  findOrCreateByUserId(userId: string): Cart {
-    const userCart = this.findByUserId(userId);
+            if (!id || !userId || !createdAt || !updatedAt || !status) {
+                throw new Error("One variable is undefined");
+            };
 
-    if (userCart) {
-      return userCart;
-    }
+            await client.query(addCartQuery, [id, userId, createdAt, updatedAt, status]);
 
-    return this.createByUserId(userId);
-  }
+            return { id, items: [] };
+        } catch (err) {
+            console.error("Error", err.message);
+            throw err;
+        } finally {
+            await client.end();
+        };
+    };
 
-  updateByUserId(userId: string, { items }: Cart): Cart {
-    const { id, ...rest } = this.findOrCreateByUserId(userId);
+    async findOrCreateByUserId(userId: string): Promise<Cart> {
+        let userCart = await this.findByUserId(userId);
 
-    const updatedCart = {
-      id,
-      ...rest,
-      items: [ ...items ],
-    }
+        if (!userCart) {
+            userCart = await this.createByUserId(userId);
+        };
 
-    this.userCarts[ userId ] = { ...updatedCart };
+        return userCart;
+    };
 
-    return { ...updatedCart };
-  }
+    async updateByUserId(userId: string, { items }: Cart) {
+        const client = await createClient();
 
-  removeByUserId(userId): void {
-    this.userCarts[ userId ] = null;
-  }
+        try {
 
-}
+            const { id, ...rest } = await this.findOrCreateByUserId(userId);
+            const updatedCart = {
+                id,
+                ...rest,
+                items: [...items],
+            };
+
+            await client.query(deleteCartItemQuery, [id]);
+
+            for (const item of items) {
+                await client.query(addCartItemQuery, [id, item.product.id, item.count]);
+            };
+
+            return updatedCart;
+        } catch (err) {
+            console.error("Error", err.message);
+            throw err;
+        } finally {
+            await client.end();
+        };
+    };
+
+    async removeByUserId(userId: string): Promise<void> {
+        const client = await createClient();
+
+        try {
+            await client.query(deleteCartByUserId, [userId]);
+        } catch (err) {
+            console.error("Error", err.message);
+            throw err;
+        } finally {
+            await client.end();
+        };
+    };
+};
