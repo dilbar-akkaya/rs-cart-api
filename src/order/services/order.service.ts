@@ -1,39 +1,38 @@
-import { Injectable } from '@nestjs/common';
-import { v4 } from 'uuid';
-
-import { Order } from '../models';
+import { Injectable } from "@nestjs/common";
+import { v4 } from "uuid";
+import { Order } from "../models";
 
 @Injectable()
 export class OrderService {
-  private orders: Record<string, Order> = {}
+    private orders: Record<string, Order> = {};
 
-  findById(orderId: string): Order {
-    return this.orders[ orderId ];
-  }
-
-  create(data: any) {
-    const id = v4(v4())
-    const order = {
-      ...data,
-      id,
-      status: 'inProgress',
+    findById(orderId: string): Order {
+        return this.orders[ orderId ];
     };
 
-    this.orders[ id ] = order;
+    create(data: any) {
+        const id = v4();
+        const order = {
+            ...data,
+            id,
+            status: "inProgress",
+        };
 
-    return order;
-  }
+        this.orders[ id ] = order;
 
-  update(orderId, data) {
-    const order = this.findById(orderId);
+        return order;
+    };
 
-    if (!order) {
-      throw new Error('Order does not exist.');
-    }
+    update(orderId, data) {
+        const order = this.findById(orderId);
 
-    this.orders[ orderId ] = {
-      ...data,
-      id: orderId,
-    }
-  }
-}
+        if (!order) {
+            throw new Error("Order does not exist.");
+        };
+
+        this.orders[ orderId ] = {
+            ...data,
+            id: orderId,
+        };
+    };
+};
